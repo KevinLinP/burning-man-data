@@ -1,19 +1,9 @@
 import fs from "fs";
-import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import serviceAccountKey from "./serviceAccountKey.json" assert { type: "json" };
+import { initializeFirestoreDb } from "./lib/firebase";
 
 const parseCamps = () => {
   const fileString = fs.readFileSync("data/2022-camps.json");
   return JSON.parse(fileString);
-};
-
-const initializeFirebaseDb = () => {
-  initializeApp({
-    credential: cert(serviceAccountKey),
-  });
-
-  return getFirestore();
 };
 
 const bulkWriteCamps = async ({ camps, db }) => {
@@ -35,7 +25,7 @@ const getCampCount = async ({ db }) => {
 };
 
 const run = async () => {
-  const db = initializeFirebaseDb();
+  const db = initializeFirestoreDb();
   const camps = parseCamps();
 
   const campsLength = camps.length;
