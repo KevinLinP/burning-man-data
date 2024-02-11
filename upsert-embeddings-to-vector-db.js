@@ -63,6 +63,7 @@ const generateCampVectors = ({ campEmbedding }) => {
     vectors.push({
       id: `${campId}|name`,
       values: data.name,
+      metadata: { type: "camp", property: "name" },
     });
   }
 
@@ -70,6 +71,7 @@ const generateCampVectors = ({ campEmbedding }) => {
     vectors.push({
       id: `${campId}|description`,
       values: data.description,
+      metadata: { type: "camp", property: "description" },
     });
   }
 
@@ -78,6 +80,7 @@ const generateCampVectors = ({ campEmbedding }) => {
       vectors.push({
         id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(phrase)}`,
         values: embedding,
+        metadata: { type: "camp", property: "descriptionPhrase" },
       });
     });
   }
