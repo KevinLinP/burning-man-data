@@ -18,12 +18,12 @@ const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
   return Object.fromEntries(entries);
 };
 
-const upsertCampEmbeddings = async () => {
+const generateAndStoreEmbeddings = async () => {
   const db = initializeFirestoreDb();
   const camps = loadCamps();
   const campChunks = _.chunk(Object.values(camps), BATCH_SIZE);
 
-  for (let i = 0; i < Math.min(NUM_BATCHES, campChunks.length); i++) {
+  for (const chunk of _.take(campChunks, NUM_BATCHES)) {
     await upsertCampEmbeddingsChunk({ db, chunk: campChunks[i] });
   }
 };
@@ -141,4 +141,4 @@ const setDescriptionPhrasesEmbeddings = async (descriptionPhrases) => {
   }
 };
 
-upsertCampEmbeddings();
+generateAndStoreEmbeddings();
