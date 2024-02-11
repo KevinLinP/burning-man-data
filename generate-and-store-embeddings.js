@@ -24,54 +24,56 @@ const generateAndStoreEmbeddings = async () => {
   const campChunks = _.chunk(camps, BATCH_SIZE);
 
   for (const chunk of _.take(campChunks, NUM_BATCHES)) {
-    await upsertCampEmbeddingsChunk({ db, chunk });
+    const campUids = chunk.map((camp) => camp.uid);
+    const campEmbeddings = await fetchCampEmbeddingsByCampUids({
+      db,
+      campUids,
+    });
+
+    for (const camp of chunk) {
+      const campEmbedding = campEmbeddings[camp.uid];
+      await upsertCampEmbeddings({ db, camp, campEmbedding });
+    }
   }
 };
 
-const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
-  const campUids = chunk.map((camp) => camp.uid);
-  const campEmbeddings = await fetchCampEmbeddingsByCampUids({
-    db,
-    campUids,
+const upsertCampEmbeddings = async ({ db, camp, campEmbedding }) => {
+  const ref =
+    campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
+  const currentCampEmbeddingData = campEmbedding?.data() || {
+    indexedAt: null,
+  };
+
+  const descriptionPhrases = await getDescriptionPhrasesObj({
+    camp,
+    currentCampEmbeddingData,
   });
 
-  for (const camp of chunk) {
-    const campEmbedding = campEmbeddings[camp.uid];
-    const ref =
-      campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
-    const currentCampEmbeddingData = campEmbedding?.data() || {
-      indexedAt: null,
-    };
+  await setDescriptionPhrasesEmbeddings(descriptionPhrases);
 
-    const descriptionPhrases = await getDescriptionPhrasesObj({
-      camp,
-      currentCampEmbeddingData,
-    });
-    await setDescriptionPhrasesEmbeddings(descriptionPhrases);
+  const newCampEmbeddingData = {
+    campUid: camp.uid,
+    name: await setEmbedding({
+      text: camp.name,
+      currentEmbedding: currentCampEmbeddingData.name,
+    }),
+    description: await setEmbedding({
+      text: camp.description,
+      currentEmbedding: currentCampEmbeddingData.description,
+    }),
+    descriptionPhrases,
+  };
 
-    const newCampEmbeddingData = {
-      campUid: camp.uid,
-      name: await setEmbedding({
-        text: camp.name,
-        currentEmbedding: currentCampEmbeddingData.name,
-      }),
-      description: await setEmbedding({
-        text: camp.description,
-        currentEmbedding: currentCampEmbeddingData.description,
-      }),
-      descriptionPhrases,
-    };
+  if (_.isMatch(currentCampEmbeddingData, newCampEmbeddingData)) return;
 
-    if (_.isMatch(currentCampEmbeddingData, newCampEmbeddingData)) continue;
+  console.log(
+    "ref.set",
+    ref.id,
+    camp.name,
+    Object.keys(_.pickBy(newCampEmbeddingData, (v) => v !== null))
+  );
 
-    console.log(
-      "ref.set",
-      ref.id,
-      camp.name,
-      Object.keys(_.pickBy(newCampEmbeddingData, (v) => v !== null))
-    );
-    await ref.set(newCampEmbeddingData, { merge: true });
-  }
+  await ref.set(newCampEmbeddingData, { merge: true });
 };
 
 const setEmbedding = async ({ text, currentEmbedding }) => {
