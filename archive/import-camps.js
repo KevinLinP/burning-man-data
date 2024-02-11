@@ -1,5 +1,5 @@
 import fs from "fs";
-import { initializeFirestoreDb } from "./lib/firebase";
+import { initializeFirestoreDb } from "../lib/firebase";
 
 const parseCamps = () => {
   const fileString = fs.readFileSync("data/2022-camps.json");
