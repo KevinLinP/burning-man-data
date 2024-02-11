@@ -5,9 +5,11 @@ import _ from "lodash";
 import { loadCamps } from "./lib/load-data.js";
 import { initializeFirestoreDb } from "./lib/firebase.js";
 
-const NUM_BATCHES = 1;
+const NUM_BATCHES = 3;
 // limited to 30 by Firestore's 'in' query
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 30;
+
+const ID_LENGTH_LIMIT = 512;
 
 const upsertEmbeddingsToVectorDb = async () => {
   const db = initializeFirestoreDb();
@@ -78,7 +80,9 @@ const generateCampVectors = ({ campEmbedding }) => {
   if (data.descriptionPhrases) {
     Object.entries(data.descriptionPhrases).forEach(([phrase, embedding]) => {
       vectors.push({
-        id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(phrase)}`,
+        id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(
+          phrase
+        )}`.substring(0, ID_LENGTH_LIMIT),
         values: embedding,
         metadata: { type: "camp", property: "descriptionPhrase" },
       });

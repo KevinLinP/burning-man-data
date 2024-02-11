@@ -4,7 +4,7 @@ import { getEmbedding } from "./lib/openai.js";
 import OpenAI from "openai";
 import _ from "lodash";
 
-const NUM_BATCHES = 1;
+const NUM_BATCHES = 1000;
 // limited to 30 by Firestore's 'in' query
 const BATCH_SIZE = 30;
 
@@ -20,11 +20,20 @@ const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
 
 const generateAndStoreEmbeddings = async () => {
   const db = initializeFirestoreDb();
-  const camps = loadCamps();
-  const campChunks = _.chunk(Object.values(camps), BATCH_SIZE);
+  let camps = Object.values(loadCamps());
+  const resumeFromId = process.argv[2];
+  if (resumeFromId) {
+    const resumeFromIndex = camps.findIndex((camp) => camp.uid == resumeFromId);
+    if (resumeFromIndex == -1) {
+      console.error("resumeFromId not found", resumeFromId);
+      return;
+    }
+    camps = camps.slice(resumeFromIndex);
+  }
+  const campChunks = _.chunk(camps, BATCH_SIZE);
 
   for (const chunk of _.take(campChunks, NUM_BATCHES)) {
-    await upsertCampEmbeddingsChunk({ db, chunk: campChunks[i] });
+    await upsertCampEmbeddingsChunk({ db, chunk });
   }
 };
 
@@ -130,8 +139,9 @@ const getDescriptionPhrases = async ({ description }) => {
   });
 
   const jsonString = completion.choices[0].message.content;
+  const rawArray = Object.values(JSON.parse(jsonString));
 
-  return Object.values(JSON.parse(jsonString));
+  return rawArray.filter((string) => string && string.length > 0);
 };
 
 const setDescriptionPhrasesEmbeddings = async (descriptionPhrases) => {
