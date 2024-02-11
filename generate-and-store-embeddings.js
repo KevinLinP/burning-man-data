@@ -7,6 +7,7 @@ import _ from "lodash";
 const NUM_BATCHES = 1000;
 // limited to 30 by Firestore's 'in' query
 const BATCH_SIZE = 30;
+const NUM_PARALLEL = 2;
 
 const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
   const querySnapshot = await db
@@ -23,15 +24,35 @@ const generateAndStoreEmbeddings = async () => {
   let camps = Object.values(loadCamps({ supportResumeFromIndex: true }));
   const campChunks = _.chunk(camps, BATCH_SIZE);
 
+  let chunkCount = 1;
   for (const chunk of _.take(campChunks, NUM_BATCHES)) {
+    console.log("chunk", chunkCount, chunkCount * BATCH_SIZE);
+    chunkCount++;
     const campUids = chunk.map((camp) => camp.uid);
     const campEmbeddings = await fetchCampEmbeddingsByCampUids({
       db,
       campUids,
     });
 
-    for (const camp of chunk) {
-      await processCamp({ camp, db, campEmbeddings });
+    const unprocessedCamps = [...chunk];
+    let promises = [];
+
+    while (unprocessedCamps.length > 0) {
+      while (promises.length < NUM_PARALLEL && unprocessedCamps.length > 0) {
+        const camp = unprocessedCamps.shift();
+
+        const promise = processCamp({ camp, db, campEmbeddings }).then(() => {
+          const beforeLength = promises.length;
+          _.pull(promises, promise);
+          if (promises.length != beforeLength - 1) {
+            throw new Error("Failed to remove promise from array");
+          }
+        });
+
+        promises.push(promise);
+      }
+
+      await Promise.any(promises);
     }
   }
 };
