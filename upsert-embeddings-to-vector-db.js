@@ -1,11 +1,13 @@
 import { Pinecone } from "@pinecone-database/pinecone";
+import { FieldValue } from "firebase-admin/firestore";
+import _ from "lodash";
+
 import { loadCamps } from "./lib/load-data.js";
 import { initializeFirestoreDb } from "./lib/firebase.js";
-import _ from "lodash";
 
 const NUM_BATCHES = 1;
 // limited to 30 by Firestore's 'in' query
-const BATCH_SIZE = 1;
+const BATCH_SIZE = 5;
 
 const upsertEmbeddingsToVectorDb = async () => {
   const db = initializeFirestoreDb();
@@ -30,8 +32,15 @@ const upsertCampEmbeddingsChunk = async ({ db, index, ids }) => {
 
   for (const id of ids) {
     const campEmbedding = campEmbeddings[id];
+    if (campEmbedding.data().indexedAt) continue;
+
     const campVectors = generateCampVectors({ campEmbedding });
-    console.log(id, campEmbedding, campVectors);
+    await index.upsert(campVectors);
+    await campEmbedding.ref.set(
+      { indexedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    console.log(id, campVectors.length);
   }
 };
 
@@ -67,13 +76,26 @@ const generateCampVectors = ({ campEmbedding }) => {
   if (data.descriptionPhrases) {
     Object.entries(data.descriptionPhrases).forEach(([phrase, embedding]) => {
       vectors.push({
-        id: `${campId}|descriptionPhrase|${phrase}`,
+        id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(phrase)}`,
         values: embedding,
       });
     });
   }
 
   return vectors;
+};
+
+// copied from phind.com
+const utf8ToAsciiEscape = (str) => {
+  // Match characters that are not within the ASCII range (0-127)
+  const regex = /[\x7f-\uffff]/g;
+  // Replacer function to convert matched characters to their Unicode escape sequence
+  const replacer = (match) => {
+    const charCode = match.charCodeAt(0);
+    return `\\u${charCode.toString(16).padStart(4, "0")}`;
+  };
+  // Replace all matched characters with their Unicode escape sequence
+  return str.replace(regex, replacer);
 };
 
 upsertEmbeddingsToVectorDb();
