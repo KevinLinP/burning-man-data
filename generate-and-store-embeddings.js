@@ -31,41 +31,42 @@ const generateAndStoreEmbeddings = async () => {
     });
 
     for (const camp of chunk) {
-      const campEmbedding = campEmbeddings[camp.uid];
-      const ref =
-        campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
-      const currentCampEmbeddingData = campEmbedding?.data() || {
-        indexedAt: null,
-      };
-
-      let descriptionOfferingStrings =
-        currentCampEmbeddingData.descriptionOfferings;
-
-      if (!descriptionOfferingStrings) {
-        descriptionOfferingStrings = await getDescriptionOfferingStrings({
-          description: camp.description,
-        });
-
-        if (
-          descriptionOfferingStrings &&
-          descriptionOfferingStrings.length > 0
-        ) {
-          console.log("getDescriptionOfferingStrings", camp.uid, camp.name, [
-            camp.description,
-            descriptionOfferingStrings,
-          ]);
-        }
-      }
-
-      // keep looping without waiting
-      upsertCampEmbeddings({
-        ref,
-        camp,
-        descriptionOfferingStrings,
-        currentCampEmbeddingData,
-      });
+      await processCamp({ camp, db, campEmbeddings });
     }
   }
+};
+
+const processCamp = async ({ camp, db, campEmbeddings }) => {
+  const campEmbedding = campEmbeddings[camp.uid];
+  const ref =
+    campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
+  const currentCampEmbeddingData = campEmbedding?.data() || {
+    indexedAt: null,
+  };
+
+  let descriptionOfferingStrings =
+    currentCampEmbeddingData.descriptionOfferings;
+
+  if (!descriptionOfferingStrings) {
+    descriptionOfferingStrings = await getDescriptionOfferingStrings({
+      description: camp.description,
+    });
+
+    if (descriptionOfferingStrings && descriptionOfferingStrings.length > 0) {
+      console.log("getDescriptionOfferingStrings", camp.uid, camp.name, [
+        camp.description,
+        descriptionOfferingStrings,
+      ]);
+    }
+  }
+
+  // keep looping without waiting
+  upsertCampEmbeddings({
+    ref,
+    camp,
+    descriptionOfferingStrings,
+    currentCampEmbeddingData,
+  });
 };
 
 const upsertCampEmbeddings = async ({
