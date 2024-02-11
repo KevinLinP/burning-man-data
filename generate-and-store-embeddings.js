@@ -50,8 +50,7 @@ const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
       campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
     const currentCampEmbeddingData = campEmbedding?.data() || {};
 
-    const descriptionPhrases = await upsertDescriptionPhrases({
-      ref,
+    const descriptionPhrases = await getDescriptionPhrasesObj({
       camp,
       currentCampEmbeddingData,
     });
@@ -72,7 +71,12 @@ const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
 
     if (_.isMatch(currentCampEmbeddingData, newCampEmbeddingData)) continue;
 
-    console.log("ref.set", ref.id, Object.keys(newCampEmbeddingData));
+    console.log(
+      "ref.set",
+      ref.id,
+      camp.name,
+      Object.keys(_.pickBy(newCampEmbeddingData, (v) => v !== null))
+    );
     await ref.set(newCampEmbeddingData, { merge: true });
   }
 };
@@ -81,26 +85,19 @@ const setEmbedding = async ({ text, currentEmbedding }) => {
   if (currentEmbedding != undefined) return currentEmbedding;
   if (!text || text.length == 0) return null;
 
-  console.log("getEmbedding", text);
   return await getEmbedding({ text });
 };
 
 // if descriptionPhrases have not been calculated yet, ask GPT for them,
 // and save the results as keys with null values (for the embeddings of those phrases)
-const upsertDescriptionPhrases = async ({
-  ref,
-  camp,
-  currentCampEmbeddingData,
-}) => {
+const getDescriptionPhrasesObj = async ({ camp, currentCampEmbeddingData }) => {
   if (currentCampEmbeddingData.descriptionPhrases)
     // have to not mutate original
     return { ...currentCampEmbeddingData.descriptionPhrases };
 
   const description = camp.description;
   if (!description || description.length == 0) {
-    console.log("upsertDescriptionPhrases", ref.id, "empty");
-    ref.set({ campUid: camp.uid, descriptionPhrases: {} }, { merge: true });
-    return {};
+    return null;
   }
 
   const descriptionPhrasesArray = await getDescriptionPhrases({
@@ -109,12 +106,11 @@ const upsertDescriptionPhrases = async ({
   const entries = descriptionPhrasesArray.map((phrase) => [phrase, null]);
   const descriptionPhrases = Object.fromEntries(entries);
   console.log(
-    "upsertDescriptionPhrases",
-    ref.id,
+    "getDescriptionPhrasesObj",
+    camp.uid,
     description,
     descriptionPhrasesArray
   );
-  ref.set({ campUid: camp.uid, descriptionPhrases }, { merge: true });
 
   return descriptionPhrases;
 };
@@ -145,6 +141,8 @@ const getDescriptionPhrases = async ({ description }) => {
 };
 
 const setDescriptionPhrasesEmbeddings = async (descriptionPhrases) => {
+  if (!descriptionPhrases) return;
+
   for (const [phrase, embedding] of Object.entries(descriptionPhrases)) {
     if (embedding) continue;
     descriptionPhrases[phrase] = await getEmbedding({ text: phrase });
