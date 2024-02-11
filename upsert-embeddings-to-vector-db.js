@@ -5,7 +5,7 @@ import _ from "lodash";
 import { loadCamps } from "./lib/load-data.js";
 import { initializeFirestoreDb } from "./lib/firebase.js";
 
-const NUM_BATCHES = 3;
+const NUM_BATCHES = 1000;
 // limited to 30 by Firestore's 'in' query
 const BATCH_SIZE = 30;
 
@@ -13,7 +13,7 @@ const ID_LENGTH_LIMIT = 512;
 
 const upsertEmbeddingsToVectorDb = async () => {
   const db = initializeFirestoreDb();
-  const campIds = Object.keys(loadCamps());
+  const campIds = Object.keys(loadCamps({ supportResumeFromIndex: true }));
   const campIdChunks = _.chunk(campIds, BATCH_SIZE);
 
   const pc = new Pinecone({
@@ -32,8 +32,7 @@ const upsertCampEmbeddingsChunk = async ({ db, index, ids }) => {
     campUids: ids,
   });
 
-  for (const id of ids) {
-    const campEmbedding = campEmbeddings[id];
+  for (const [id, campEmbedding] of Object.entries(campEmbeddings)) {
     if (campEmbedding.data().indexedAt) continue;
 
     const campVectors = generateCampVectors({ campEmbedding });

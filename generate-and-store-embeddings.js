@@ -20,16 +20,7 @@ const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
 
 const generateAndStoreEmbeddings = async () => {
   const db = initializeFirestoreDb();
-  let camps = Object.values(loadCamps());
-  const resumeFromId = process.argv[2];
-  if (resumeFromId) {
-    const resumeFromIndex = camps.findIndex((camp) => camp.uid == resumeFromId);
-    if (resumeFromIndex == -1) {
-      console.error("resumeFromId not found", resumeFromId);
-      return;
-    }
-    camps = camps.slice(resumeFromIndex);
-  }
+  let camps = Object.values(loadCamps({ supportResumeFromIndex: true }));
   const campChunks = _.chunk(camps, BATCH_SIZE);
 
   for (const chunk of _.take(campChunks, NUM_BATCHES)) {
@@ -48,7 +39,9 @@ const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
     const campEmbedding = campEmbeddings[camp.uid];
     const ref =
       campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
-    const currentCampEmbeddingData = campEmbedding?.data() || {};
+    const currentCampEmbeddingData = campEmbedding?.data() || {
+      indexedAt: null,
+    };
 
     const descriptionPhrases = await getDescriptionPhrasesObj({
       camp,
