@@ -6,7 +6,7 @@ import _ from "lodash";
 
 const NUM_BATCHES = 1;
 // limited to 30 by Firestore's 'in' query
-const BATCH_SIZE = 1;
+const BATCH_SIZE = 30;
 
 const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
   const querySnapshot = await db
@@ -41,11 +41,12 @@ const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
       campEmbedding?.ref || db.collection("campEmbeddings").doc(camp.uid);
     const currentCampEmbeddingData = campEmbedding?.data() || {};
 
-    const descriptionPhrases = upsertDescriptionPhrases({
+    const descriptionPhrases = await upsertDescriptionPhrases({
       ref,
       camp,
       currentCampEmbeddingData,
     });
+    await setDescriptionPhrasesEmbeddings(descriptionPhrases);
 
     const newCampEmbeddingData = {
       campUid: camp.uid,
@@ -57,6 +58,7 @@ const upsertCampEmbeddingsChunk = async ({ db, chunk }) => {
         text: camp.description,
         currentEmbedding: currentCampEmbeddingData.description,
       }),
+      descriptionPhrases,
     };
 
     if (_.isMatch(currentCampEmbeddingData, newCampEmbeddingData)) continue;
@@ -82,7 +84,8 @@ const upsertDescriptionPhrases = async ({
   currentCampEmbeddingData,
 }) => {
   if (currentCampEmbeddingData.descriptionPhrases)
-    return currentCampEmbeddingData.descriptionPhrases;
+    // have to not mutate original
+    return { ...currentCampEmbeddingData.descriptionPhrases };
 
   const description = camp.description;
   if (!description || description.length == 0) {
@@ -131,16 +134,11 @@ const getDescriptionPhrases = async ({ description }) => {
   return Object.values(JSON.parse(jsonString));
 };
 
-// console.log(completion.choices[0].message.content);
-
-//   const response = await openai.embeddings.create({
-//     model: "text-embedding-3-large",
-//     input: text,
-//     encoding_format: "float",
-//   });
-//   const embedding = response.data[0];
-
-//   return embedding.embedding;
-// });
+const setDescriptionPhrasesEmbeddings = async (descriptionPhrases) => {
+  for (const [phrase, embedding] of Object.entries(descriptionPhrases)) {
+    if (embedding) continue;
+    descriptionPhrases[phrase] = await getEmbedding({ text: phrase });
+  }
+};
 
 upsertCampEmbeddings();
