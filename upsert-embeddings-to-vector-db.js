@@ -11,87 +11,149 @@ const BATCH_SIZE = 30;
 
 const ID_LENGTH_LIMIT = 512;
 
-const upsertEmbeddingsToVectorDb = async () => {};
+const NAMESPACE = "2024-02-11";
+const lastIndexedAt = new Date("2024-02-12T04:56:43.242Z");
+const VECTORS_WRITE_AT = 90;
 
-// const upsertEmbeddingsToVectorDb = async () => {
-//   const db = initializeFirestoreDb();
-//   const campIds = Object.keys(loadCamps({ supportResumeFromIndex: true }));
-//   const campIdChunks = _.chunk(campIds, BATCH_SIZE);
+const upsertEmbeddingsToVectorDb = async () => {
+  const db = initializeFirestoreDb();
+  const bulkWriter = db.bulkWriter();
 
-//   const pc = new Pinecone({
-//     apiKey: process.env.PINECONE_API_KEY,
-//   });
-//   const index = pc.index("burning-man-data");
+  const camps = loadCamps({ supportResumeFromIndex: true });
+  const campIds = Object.keys(camps);
+  const campIdChunks = _.chunk(campIds, BATCH_SIZE);
 
-//   for (const ids of _.take(campIdChunks, NUM_BATCHES)) {
-//     await upsertCampEmbeddingsChunk({ db, index, ids });
-//   }
-// };
+  const namespace = getNamespace();
 
-// const upsertCampEmbeddingsChunk = async ({ db, index, ids }) => {
-//   const campEmbeddings = await fetchCampEmbeddingsByCampUids({
-//     db,
-//     campUids: ids,
-//   });
+  for (const ids of _.take(campIdChunks, NUM_BATCHES)) {
+    const campEmbeddings = await fetchCampEmbeddingsByCampUids({
+      db,
+      campUids: ids,
+    });
 
-//   for (const [id, campEmbedding] of Object.entries(campEmbeddings)) {
-//     if (campEmbedding.data().indexedAt) continue;
+    let vectorsToWrite = [];
+    let campEmbeddingsToWrite = [];
+    let vectorCounts = {};
 
-//     const campVectors = generateCampVectors({ campEmbedding });
-//     await index.upsert(campVectors);
-//     await campEmbedding.ref.set(
-//       { indexedAt: FieldValue.serverTimestamp() },
-//       { merge: true }
-//     );
-//     console.log(id, campVectors.length);
-//   }
-// };
+    for (const [id, campEmbedding] of Object.entries(campEmbeddings)) {
+      const indexedAt = campEmbedding.data().indexedAt;
+      if (indexedAt && indexedAt.toDate() > lastIndexedAt) continue;
 
-// const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
-//   const querySnapshot = await db
-//     .collection("campEmbeddings")
-//     .where("campUid", "in", campUids)
-//     .get();
-//   const entries = querySnapshot.docs.map((doc) => [doc.id, doc]);
+      const campVectors = generateCampVectors({ campEmbedding });
+      vectorCounts[id] = campVectors.length;
+      vectorsToWrite = [...vectorsToWrite, ...campVectors];
+      campEmbeddingsToWrite.push(campEmbedding);
 
-//   return Object.fromEntries(entries);
-// };
+      if (vectorsToWrite.length >= VECTORS_WRITE_AT) {
+        await flushWrites({
+          namespace,
+          bulkWriter,
+          campEmbeddingsToWrite,
+          vectorCounts,
+          vectorsToWrite,
+        });
+      }
+    }
 
-// const generateCampVectors = ({ campEmbedding }) => {
-//   const data = campEmbedding.data();
-//   const campId = `camp|${data.campUid}`;
-//   const vectors = [];
+    if (vectorsToWrite.length > 0) {
+      await flushWrites({
+        namespace,
+        bulkWriter,
+        campEmbeddingsToWrite,
+        vectorCounts,
+        vectorsToWrite,
+      });
+    }
+  }
 
-//   if (data.name) {
-//     vectors.push({
-//       id: `${campId}|name`,
-//       values: data.name,
-//       metadata: { type: "camp", property: "name" },
-//     });
-//   }
+  bulkWriter.close();
+};
 
-//   if (data.description) {
-//     vectors.push({
-//       id: `${campId}|description`,
-//       values: data.description,
-//       metadata: { type: "camp", property: "description" },
-//     });
-//   }
+const flushWrites = async ({
+  namespace,
+  bulkWriter,
+  campEmbeddingsToWrite,
+  vectorCounts,
+  vectorsToWrite,
+}) => {
+  await namespace.upsert(vectorsToWrite);
+  vectorsToWrite.length = 0;
 
-//   if (data.descriptionPhrases) {
-//     Object.entries(data.descriptionPhrases).forEach(([phrase, embedding]) => {
-//       vectors.push({
-//         id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(
-//           phrase
-//         )}`.substring(0, ID_LENGTH_LIMIT),
-//         values: embedding,
-//         metadata: { type: "camp", property: "descriptionPhrase" },
-//       });
-//     });
-//   }
+  campEmbeddingsToWrite.forEach((campEmbedding) => {
+    bulkWriter
+      .set(
+        campEmbedding.ref,
+        { indexedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      )
+      .then(() => {
+        const campIndex = campEmbedding.data().campIndex;
+        const indexString = campIndex && campIndex.toString().padStart(4, "0");
 
-//   return vectors;
-// };
+        console.log(
+          indexString,
+          campEmbedding.id,
+          vectorCounts[campEmbedding.id]
+        );
+      });
+  });
+  campEmbeddingsToWrite.length = 0;
+};
+
+const getNamespace = () => {
+  const pc = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
+  });
+  const index = pc.index("burning-man-data");
+  return index.namespace(NAMESPACE);
+};
+
+const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
+  const querySnapshot = await db
+    .collection("campEmbeddings")
+    .where("campUid", "in", campUids)
+    .get();
+  const entries = querySnapshot.docs.map((doc) => [doc.id, doc]);
+
+  return Object.fromEntries(entries);
+};
+
+const generateCampVectors = ({ campEmbedding }) => {
+  const data = campEmbedding.data();
+  const campId = `camp|${data.campUid}`;
+  const vectors = [];
+
+  if (data.name) {
+    vectors.push({
+      id: `${campId}|name`,
+      values: data.name,
+      metadata: { type: "camp", property: "name" },
+    });
+  }
+
+  if (data.description) {
+    vectors.push({
+      id: `${campId}|description`,
+      values: data.description,
+      metadata: { type: "camp", property: "description" },
+    });
+  }
+
+  if (data.descriptionOfferings) {
+    Object.entries(data.descriptionOfferings).forEach(([text, embedding]) => {
+      const escapedText = utf8ToAsciiEscape(text);
+      let id = `${campId}|descriptionOffering|${escapedText}`;
+      id = id.substring(0, ID_LENGTH_LIMIT);
+      vectors.push({
+        id,
+        values: embedding,
+        metadata: { type: "camp", property: "descriptionOffering" },
+      });
+    });
+  }
+
+  return vectors;
+};
 
 // copied from phind.com
 const utf8ToAsciiEscape = (str) => {
