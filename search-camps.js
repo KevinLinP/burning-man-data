@@ -4,16 +4,15 @@ import _ from "lodash";
 import { getEmbedding } from "./lib/openai.js";
 import { loadCamps } from "./lib/load-data.js";
 
+const NAMESPACE = "2024-02-11";
+
 const searchCamps = async ({ query }) => {
-  const pc = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY,
-  });
-  const index = pc.index("burning-man-data");
+  const namespace = getNamespace();
 
   const camps = loadCamps();
 
   const queryEmbedding = await getEmbedding({ text: query });
-  const queryResponse = await index.query({
+  const queryResponse = await namespace.query({
     vector: queryEmbedding,
     topK: 25,
   });
@@ -43,6 +42,14 @@ const searchCamps = async ({ query }) => {
 
   console.log(_.take(campStrings, 10).join("\n\n"));
   console.log("");
+};
+
+const getNamespace = () => {
+  const pc = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
+  });
+  const index = pc.index("burning-man-data");
+  return index.namespace(NAMESPACE);
 };
 
 const query = process.argv.slice(2).join(" ");

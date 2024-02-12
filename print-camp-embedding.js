@@ -7,7 +7,8 @@ const printCampEmbedding = async () => {
   const ref = db.collection("campEmbeddings").doc(id);
 
   const doc = await ref.get();
-  console.log(doc.data());
+  // console.log(doc.data());
+  console.log(Object.keys(doc.data().descriptionOfferings));
 };
 
 printCampEmbedding();
