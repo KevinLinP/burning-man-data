@@ -11,85 +11,87 @@ const BATCH_SIZE = 30;
 
 const ID_LENGTH_LIMIT = 512;
 
-const upsertEmbeddingsToVectorDb = async () => {
-  const db = initializeFirestoreDb();
-  const campIds = Object.keys(loadCamps({ supportResumeFromIndex: true }));
-  const campIdChunks = _.chunk(campIds, BATCH_SIZE);
+const upsertEmbeddingsToVectorDb = async () => {};
 
-  const pc = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY,
-  });
-  const index = pc.index("burning-man-data");
+// const upsertEmbeddingsToVectorDb = async () => {
+//   const db = initializeFirestoreDb();
+//   const campIds = Object.keys(loadCamps({ supportResumeFromIndex: true }));
+//   const campIdChunks = _.chunk(campIds, BATCH_SIZE);
 
-  for (const ids of _.take(campIdChunks, NUM_BATCHES)) {
-    await upsertCampEmbeddingsChunk({ db, index, ids });
-  }
-};
+//   const pc = new Pinecone({
+//     apiKey: process.env.PINECONE_API_KEY,
+//   });
+//   const index = pc.index("burning-man-data");
 
-const upsertCampEmbeddingsChunk = async ({ db, index, ids }) => {
-  const campEmbeddings = await fetchCampEmbeddingsByCampUids({
-    db,
-    campUids: ids,
-  });
+//   for (const ids of _.take(campIdChunks, NUM_BATCHES)) {
+//     await upsertCampEmbeddingsChunk({ db, index, ids });
+//   }
+// };
 
-  for (const [id, campEmbedding] of Object.entries(campEmbeddings)) {
-    if (campEmbedding.data().indexedAt) continue;
+// const upsertCampEmbeddingsChunk = async ({ db, index, ids }) => {
+//   const campEmbeddings = await fetchCampEmbeddingsByCampUids({
+//     db,
+//     campUids: ids,
+//   });
 
-    const campVectors = generateCampVectors({ campEmbedding });
-    await index.upsert(campVectors);
-    await campEmbedding.ref.set(
-      { indexedAt: FieldValue.serverTimestamp() },
-      { merge: true }
-    );
-    console.log(id, campVectors.length);
-  }
-};
+//   for (const [id, campEmbedding] of Object.entries(campEmbeddings)) {
+//     if (campEmbedding.data().indexedAt) continue;
 
-const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
-  const querySnapshot = await db
-    .collection("campEmbeddings")
-    .where("campUid", "in", campUids)
-    .get();
-  const entries = querySnapshot.docs.map((doc) => [doc.id, doc]);
+//     const campVectors = generateCampVectors({ campEmbedding });
+//     await index.upsert(campVectors);
+//     await campEmbedding.ref.set(
+//       { indexedAt: FieldValue.serverTimestamp() },
+//       { merge: true }
+//     );
+//     console.log(id, campVectors.length);
+//   }
+// };
 
-  return Object.fromEntries(entries);
-};
+// const fetchCampEmbeddingsByCampUids = async ({ db, campUids }) => {
+//   const querySnapshot = await db
+//     .collection("campEmbeddings")
+//     .where("campUid", "in", campUids)
+//     .get();
+//   const entries = querySnapshot.docs.map((doc) => [doc.id, doc]);
 
-const generateCampVectors = ({ campEmbedding }) => {
-  const data = campEmbedding.data();
-  const campId = `camp|${data.campUid}`;
-  const vectors = [];
+//   return Object.fromEntries(entries);
+// };
 
-  if (data.name) {
-    vectors.push({
-      id: `${campId}|name`,
-      values: data.name,
-      metadata: { type: "camp", property: "name" },
-    });
-  }
+// const generateCampVectors = ({ campEmbedding }) => {
+//   const data = campEmbedding.data();
+//   const campId = `camp|${data.campUid}`;
+//   const vectors = [];
 
-  if (data.description) {
-    vectors.push({
-      id: `${campId}|description`,
-      values: data.description,
-      metadata: { type: "camp", property: "description" },
-    });
-  }
+//   if (data.name) {
+//     vectors.push({
+//       id: `${campId}|name`,
+//       values: data.name,
+//       metadata: { type: "camp", property: "name" },
+//     });
+//   }
 
-  if (data.descriptionPhrases) {
-    Object.entries(data.descriptionPhrases).forEach(([phrase, embedding]) => {
-      vectors.push({
-        id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(
-          phrase
-        )}`.substring(0, ID_LENGTH_LIMIT),
-        values: embedding,
-        metadata: { type: "camp", property: "descriptionPhrase" },
-      });
-    });
-  }
+//   if (data.description) {
+//     vectors.push({
+//       id: `${campId}|description`,
+//       values: data.description,
+//       metadata: { type: "camp", property: "description" },
+//     });
+//   }
 
-  return vectors;
-};
+//   if (data.descriptionPhrases) {
+//     Object.entries(data.descriptionPhrases).forEach(([phrase, embedding]) => {
+//       vectors.push({
+//         id: `${campId}|descriptionPhrase|${utf8ToAsciiEscape(
+//           phrase
+//         )}`.substring(0, ID_LENGTH_LIMIT),
+//         values: embedding,
+//         metadata: { type: "camp", property: "descriptionPhrase" },
+//       });
+//     });
+//   }
+
+//   return vectors;
+// };
 
 // copied from phind.com
 const utf8ToAsciiEscape = (str) => {
