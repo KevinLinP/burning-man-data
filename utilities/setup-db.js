@@ -33,9 +33,15 @@ const deleteRow = async ({ id }) => {
   console.log(result);
 };
 
-// await createTable();
-await listRows();
-// await insertRow();
-// await deleteRow({ id: "c387d94e-0f11-4503-99ea-5fcada0f615c" });
+const run = async () => {
+  try {
+    // await createTable();
+    await listRows();
+    // await insertRow();
+    // await deleteRow({ id: "c387d94e-0f11-4503-99ea-5fcada0f615c" });
+  } finally {
+    db.destroy();
+  }
+};
 
-process.exit();
+run();
