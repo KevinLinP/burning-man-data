@@ -1,7 +1,7 @@
 import _ from "lodash";
 
-import { loadCamps } from "./load-data.js";
-import { initializeFirestoreDb } from "./firebase.js";
+import { loadCamps } from "../lib/load-data.js";
+import { initializeFirestoreDb } from "../lib/firebase.js";
 
 const LIMIT = 10000;
 
