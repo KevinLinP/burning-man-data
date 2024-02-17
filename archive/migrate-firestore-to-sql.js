@@ -1,9 +1,9 @@
-import { initializeFirestoreDb } from "../lib/firebase.js";
-import { db } from "../lib/sql-db.js";
-import { loadCamps } from "../lib/load-data.js";
+import { initializeFirestoreDb } from "#lib/firebase.js";
+import { db } from "#lib/sql-db.js";
+import { loadCamps } from "#lib/load-data.js";
 
-const INDEX_LIMIT = 1;
-const BATCH_SIZE = 1;
+const INDEX_LIMIT = 10000;
+const BATCH_SIZE = 30;
 
 const migrateDocuments = async ({ camps, startIndex, firestore }) => {
   const endIndex = startIndex + BATCH_SIZE - 1;
@@ -16,17 +16,15 @@ const migrateDocuments = async ({ camps, startIndex, firestore }) => {
   const querySnapshot = await query.get();
   const docs = querySnapshot.docs;
 
-  console.log({ docs });
-
   docs.forEach((doc) => {
     embeddings = embeddings.concat(generateEmbeddings({ doc, camps }));
   });
 
+  console.log(`${startIndex}-${endIndex}: ${embeddings.length}`);
   const result = await db("embeddings")
     .insert(embeddings)
     .onConflict(["objectType", "objectId", "property", "text"])
     .merge();
-  console.log(result);
 };
 
 const generateEmbeddings = ({ doc, camps }) => {
