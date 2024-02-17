@@ -4,6 +4,7 @@ import { loadCamps } from "#lib/load-data.js";
 
 const INDEX_LIMIT = 10000;
 const BATCH_SIZE = 30;
+const START_INDEX = 1200;
 
 const migrateDocuments = async ({ camps, startIndex, firestore }) => {
   const endIndex = startIndex + BATCH_SIZE - 1;
@@ -21,6 +22,9 @@ const migrateDocuments = async ({ camps, startIndex, firestore }) => {
   });
 
   console.log(`${startIndex}-${endIndex}: ${embeddings.length}`);
+
+  if (embeddings.length === 0) return;
+
   const result = await db("embeddings")
     .insert(embeddings)
     .onConflict(["objectType", "objectId", "property", "text"])
@@ -34,7 +38,7 @@ const generateEmbeddings = ({ doc, camps }) => {
   const commonFields = {
     objectType: "camp",
     objectId: doc.id,
-    indexedAt: data.indexedAt.toDate(),
+    indexedAt: data.indexedAt ? data.indexedAt.toDate() : null,
   };
 
   let embeddings = [
@@ -74,7 +78,7 @@ const run = async () => {
   const camps = loadCamps({ supportResumeFromIndex: false });
   const indexLimit = INDEX_LIMIT || camps.length;
 
-  let startIndex = 0;
+  let startIndex = START_INDEX;
   while (startIndex < indexLimit) {
     await migrateDocuments({ camps, startIndex, firestore });
     startIndex += BATCH_SIZE;
